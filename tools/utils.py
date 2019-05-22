@@ -22,7 +22,8 @@ class strLabelConverterForAttention(object):
         self.alphabet = alphabet.split(sep)
 
         self.dict = {}
-        for i, item in enumerate(self.alphabet):
+        for i, item in enumerate(self.alphabet): # alphabet是所有待识别字符，将字符存入字典并编号
+            # '0':0, '1':1,....,'9':9,'a':10,'b':11,...,'z':35.
             self.dict[item] = i
 
     def scan(self, text):
@@ -32,7 +33,7 @@ class strLabelConverterForAttention(object):
         for i in range(len(text_tmp)):
             text_result = ''
             for j in range(len(text_tmp[i])):
-                chara = text_tmp[i][j].lower() if self._ignore_case else text_tmp[i][j]
+                chara = text_tmp[i][j].lower() if self._ignore_case else text_tmp[i][j] #if _ignore_case开启，则忽略大小写文本
                 if chara not in self.alphabet:
                     if chara in self._out_of_list:
                         continue
@@ -51,6 +52,7 @@ class strLabelConverterForAttention(object):
         return text_result
 
     def encode(self, text, scanned=True):
+        #将文本转为对应dict中的类别编号
         """Support batch or single str.
 
         Args:
@@ -66,17 +68,19 @@ class strLabelConverterForAttention(object):
 
         if isinstance(text, str):
             text = [
-                self.dict[char.lower() if self._ignore_case else char]
+                self.dict[char.lower() if self._ignore_case else char] #if _ignore_case开启，则忽略大小写文本,将文本转为对应dict中的类别编号
                 for char in text
             ]
             length = [len(text)]
-        elif isinstance(text, collections.Iterable):
+        elif isinstance(text, collections.Iterable): #若不是string类型，则先转换为string
             length = [len(s) for s in text]
             text = ''.join(text)
             text, _ = self.encode(text)
-        return (torch.LongTensor(text), torch.LongTensor(length))
+        return (torch.LongTensor(text), torch.LongTensor(length)) 
 
     def decode(self, t, length):
+        #length：num_text*1
+        #将预测的编号类别转为文本
         """Decode encoded texts back into strs.
 
         Args:
