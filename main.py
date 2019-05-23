@@ -105,7 +105,7 @@ if opt.MORAN != '':
         MORAN_state_dict_rename[name] = v
     MORAN.load_state_dict(MORAN_state_dict_rename, strict=True)
 
-image = torch.FloatTensor(opt.batchSize, nc, opt.imgH, opt.imgW)
+image = torch.FloatTensor(opt.batchSize, nc, opt.imgH, opt.imgW) #64*1*64*200
 text = torch.LongTensor(opt.batchSize * 5)
 text_rev = torch.LongTensor(opt.batchSize * 5)
 length = torch.IntTensor(opt.batchSize)
