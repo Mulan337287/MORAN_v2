@@ -78,17 +78,17 @@ class Attention(nn.Module):
 
     # targets is nT * nB
     def forward(self, feats, text_length, text, test=False):
-
-        nT = feats.size(0)
-        nB = feats.size(1)
-        nC = feats.size(2)
-        hidden_size = self.hidden_size
-        input_size = self.input_size
+        # feats: 25* 64* 256
+        nT = feats.size(0) # 25 
+        nB = feats.size(1) # 64
+        nC = feats.size(2) # 512
+        hidden_size = self.hidden_size # 256
+        input_size = self.input_size  # 256
         assert(input_size == nC)
         assert(nB == text_length.numel())
 
-        num_steps = text_length.data.max()
-        num_labels = text_length.data.sum()
+        num_steps = text_length.data.max() #最长的长度
+        num_labels = text_length.data.sum() #所有标签长度
 
         if not test:
 
@@ -106,8 +106,9 @@ class Attention(nn.Module):
             hidden = Variable(torch.zeros(nB,hidden_size).type_as(feats.data))
 
             for i in range(num_steps):
-                cur_embeddings = self.char_embeddings.index_select(0, targets[i])
-                hidden, alpha = self.attention_cell(hidden, feats, cur_embeddings, test)
+                
+                cur_embeddings = self.char_embeddings.index_select(0, targets[i]) 
+                hidden, alpha = self.attention_cell(hidden, feats, cur_embeddings, test) 
                 output_hiddens[i] = hidden
 
             new_hiddens = Variable(torch.zeros(num_labels, hidden_size).type_as(feats.data))
@@ -123,7 +124,6 @@ class Attention(nn.Module):
             return probs
 
         else:
-
             hidden = Variable(torch.zeros(nB,hidden_size).type_as(feats.data))
             targets_temp = Variable(torch.zeros(nB).long().contiguous())
             probs = Variable(torch.zeros(nB*num_steps, self.num_classes))
@@ -131,17 +131,18 @@ class Attention(nn.Module):
                 targets_temp = targets_temp.cuda()
                 probs = probs.cuda()
 
-            for i in range(num_steps):
-                cur_embeddings = self.char_embeddings.index_select(0, targets_temp)
-                hidden, alpha = self.attention_cell(hidden, feats, cur_embeddings, test)
-                hidden2class = self.generator(hidden)
+            for i in range(num_steps):# num_steps是一个batch中的最长标签长度值
+                # char_embeddings是可学习参数， 38*256， num_classes* num_embeddings
+                cur_embeddings = self.char_embeddings.index_select(0, targets_temp)#64*256
+                hidden, alpha = self.attention_cell(hidden, feats, cur_embeddings, test)#hidden 64*256,  alpha 25* 64
+                hidden2class = self.generator(hidden) # 64 * 37
                 probs[i*nB:(i+1)*nB] = hidden2class
                 _, targets_temp = hidden2class.max(1)
                 targets_temp += 1
 
-            probs = probs.view(num_steps, nB, self.num_classes).permute(1, 0, 2).contiguous()
+            probs = probs.view(num_steps, nB, self.num_classes).permute(1, 0, 2).contiguous() # num_steps*nB*num_classes=>nB*num_steps*num_classes
             probs = probs.view(-1, self.num_classes).contiguous()
-            probs_res = Variable(torch.zeros(num_labels, self.num_classes).type_as(feats.data))
+            probs_res = Variable(torch.zeros(num_labels, self.num_classes).type_as(feats.data)) #对应gt的label数量
             b = 0
             start = 0
 
@@ -238,15 +239,16 @@ class ASRN(nn.Module):
 
     def forward(self, input, length, text, text_rev, test=False):
         # conv features
+        # input: 64*1*32*100
         conv = self.cnn(input)
         
-        b, c, h, w = conv.size()
+        b, c, h, w = conv.size() # 64*512*1*25
         assert h == 1, "the height of conv must be 1"
-        conv = conv.squeeze(2)
-        conv = conv.permute(2, 0, 1).contiguous()  # [w, b, c]
+        conv = conv.squeeze(2) # 64* 512*25
+        conv = conv.permute(2, 0, 1).contiguous()  # [w, b, c], 25x64x512
 
         # rnn features
-        rnn = self.rnn(conv)
+        rnn = self.rnn(conv) # 25 * 64 * 256
 
         if self.BidirDecoder:
             outputL2R = self.attentionL2R(rnn, length, text, test)
