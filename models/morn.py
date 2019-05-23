@@ -23,25 +23,25 @@ class MORN(nn.Module):
 
         self.pool = nn.MaxPool2d(2, 1)
 
-        h_list = np.arange(self.targetH)*2./(self.targetH-1)-1
-        w_list = np.arange(self.targetW)*2./(self.targetW-1)-1
+        h_list = np.arange(self.targetH)*2./(self.targetH-1)-1 #[-1,1]
+        w_list = np.arange(self.targetW)*2./(self.targetW-1)-1 #[-1,1]
 
         grid = np.meshgrid(
                 w_list, 
                 h_list, 
                 indexing='ij'
             )
-        grid = np.stack(grid, axis=-1)
-        grid = np.transpose(grid, (1, 0, 2))
-        grid = np.expand_dims(grid, 0)
-        grid = np.tile(grid, [maxBatch, 1, 1, 1])
+        grid = np.stack(grid, axis=-1) #100*32*2
+        grid = np.transpose(grid, (1, 0, 2)) #32*100*2
+        grid = np.expand_dims(grid, 0) # 1*32*100*2
+        grid = np.tile(grid, [maxBatch, 1, 1, 1]) #扩展， 256*32*100*2,假设设置的最大batch=256
         grid = torch.from_numpy(grid).type(self.inputDataType)
         if self.cuda:
             grid = grid.cuda()
             
-        self.grid = Variable(grid, requires_grad=False)
-        self.grid_x = self.grid[:, :, :, 0].unsqueeze(3)
-        self.grid_y = self.grid[:, :, :, 1].unsqueeze(3)
+        self.grid = Variable(grid, requires_grad=False) #初始的grid不要求梯度
+        self.grid_x = self.grid[:, :, :, 0].unsqueeze(3) #坐标x对应w
+        self.grid_y = self.grid[:, :, :, 1].unsqueeze(3) #y对应h
 
     def forward(self, x, test, enhance=1, debug=False):
 
@@ -53,20 +53,20 @@ class MORN(nn.Module):
         assert x.size(0) <= self.maxBatch
         assert x.data.type() == self.inputDataType
 
-        grid = self.grid[:x.size(0)]
-        grid_x = self.grid_x[:x.size(0)]
-        grid_y = self.grid_y[:x.size(0)]
-        x_small = nn.functional.upsample(x, size=(self.targetH, self.targetW), mode='bilinear')
+        grid = self.grid[:x.size(0)] #选取batch_size大小的grid, 64*32*100*2
+        grid_x = self.grid_x[:x.size(0)] #x坐标, w, 64*32*100*1
+        grid_y = self.grid_y[:x.size(0)] #y坐标, h, 64*32*100*1
+        x_small = nn.functional.upsample(x, size=(self.targetH, self.targetW), mode='bilinear') # x:64*1*64*200采样成64*1*32*100
 
-        offsets = self.cnn(x_small)
-        offsets_posi = nn.functional.relu(offsets, inplace=False)
-        offsets_nega = nn.functional.relu(-offsets, inplace=False)
-        offsets_pool = self.pool(offsets_posi) - self.pool(offsets_nega)
+        offsets = self.cnn(x_small) #offsets 64*1*4*12,三次maxpool(2,2)
+        offsets_posi = nn.functional.relu(offsets, inplace=False)#64*1*4*12
+        offsets_nega = nn.functional.relu(-offsets, inplace=False)#64*1*4*12
+        offsets_pool = self.pool(offsets_posi) - self.pool(offsets_nega)#64*1*3*11,self.pool(k=2,p=0,s=1,d=1)
 
-        offsets_grid = nn.functional.grid_sample(offsets_pool, grid)
-        offsets_grid = offsets_grid.permute(0, 2, 3, 1).contiguous()
-        offsets_x = torch.cat([grid_x, grid_y + offsets_grid], 3)
-        x_rectified = nn.functional.grid_sample(x, offsets_x)
+        offsets_grid = nn.functional.grid_sample(offsets_pool, grid) # 64*1*32*100
+        offsets_grid = offsets_grid.permute(0, 2, 3, 1).contiguous() # 64*32*100*1
+        offsets_x = torch.cat([grid_x, grid_y + offsets_grid], 3) # 64*32*100*2
+        x_rectified = nn.functional.grid_sample(x, offsets_x) #x 64*1*64*200, offsets_x 64*32*100*2， x_rectified 64*1*32*100
 
         for iteration in range(enhance):
             offsets = self.cnn(x_rectified)
