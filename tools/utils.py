@@ -27,6 +27,8 @@ class strLabelConverterForAttention(object):
             self.dict[item] = i
 
     def scan(self, text):
+        #扫描去除out_of_list的文本，不在词典内的文本
+        #扫描进行大小写的转换
         # print(text)
         text_tmp = text
         text = []
@@ -34,17 +36,17 @@ class strLabelConverterForAttention(object):
             text_result = ''
             for j in range(len(text_tmp[i])):
                 chara = text_tmp[i][j].lower() if self._ignore_case else text_tmp[i][j] #if _ignore_case开启，则忽略大小写文本
-                if chara not in self.alphabet:
-                    if chara in self._out_of_list:
+                if chara not in self.alphabet:#若字符不在字典中
+                    if chara in self._out_of_list: #out_of_list是排除掉的字符
                         continue
-                    else:
+                    else: #若字符不在排除词典中，则加入排除词典
                         self._out_of_list += chara
                         file_out_of_list = open("out_of_list.txt", "a+")
                         file_out_of_list.write(chara + "\n")
                         file_out_of_list.close()
                         print('" %s " is not in alphabet...' % chara)
                         continue
-                else:
+                else: #下一个字符
                     text_result += chara
             text.append(text_result)
         text_result = tuple(text)
