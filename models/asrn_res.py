@@ -33,23 +33,31 @@ class AttentionCell(nn.Module):
         self.rnn = nn.GRUCell(input_size+num_embeddings, hidden_size)
         self.hidden_size = hidden_size
         self.input_size = input_size
-        self.num_embeddings = num_embeddings
+        self.num_embeddings = num_embeddings #256
         self.fracPickup = fracPickup(CUDA=CUDA)
 
     def forward(self, prev_hidden, feats, cur_embeddings, test=False):
+        # pred_hidden:B*C
+        # feats: T*B*C
+        # cur_embeddings: B*C 
+        #input_size=hidden_size, C=H
         nT = feats.size(0)
         nB = feats.size(1)
         nC = feats.size(2)
-        hidden_size = self.hidden_size
+        hidden_size = self.hidden_size # 256
 
-        feats_proj = self.i2h(feats.view(-1,nC))
+        feats_proj = self.i2h(feats.view(-1,nC)) #T*B*C=>fc=>TB*H
         prev_hidden_proj = self.h2h(prev_hidden).view(1,nB, hidden_size).expand(nT, nB, hidden_size).contiguous().view(-1, hidden_size)
+        # B*C=>B*H=>(1,B,H)=>(T,B,H)=>(TB,H)
         emition = self.score(F.tanh(feats_proj + prev_hidden_proj).view(-1, hidden_size)).view(nT,nB)
+        # feats_proj + prev_hidden_proj: TB*H
+        # TB*H=>F.tanh=>TB*H=>view=>TB*H
+        #TB*H=>score=>TB*1=>view=>T*B
 
         alpha = F.softmax(emition, 0) # nT * nB
 
         if not test:
-            alpha_fp = self.fracPickup(alpha.transpose(0,1).contiguous().unsqueeze(1).unsqueeze(2)).squeeze()
+            alpha_fp = self.fracPickup(alpha.transpose(0,1).contiguous().unsqueeze(1).unsqueeze(2)).squeeze() #部分alpha
             context = (feats * alpha_fp.transpose(0,1).contiguous().view(nT,nB,1).expand(nT, nB, nC)).sum(0).squeeze(0) # nB * nC
             if len(context.size()) == 1:
                 context = context.unsqueeze(0)
@@ -60,8 +68,8 @@ class AttentionCell(nn.Module):
             context = (feats * alpha.view(nT,nB,1).expand(nT, nB, nC)).sum(0).squeeze(0) # nB * nC
             if len(context.size()) == 1:
                 context = context.unsqueeze(0)
-            context = torch.cat([context, cur_embeddings], 1)
-            cur_hidden = self.rnn(context, prev_hidden)
+            context = torch.cat([context, cur_embeddings], 1) #B*(H+num_embeddings)
+            cur_hidden = self.rnn(context, prev_hidden) #GURCell
             return cur_hidden, alpha
 
 class Attention(nn.Module):
