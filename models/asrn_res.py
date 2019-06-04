@@ -100,7 +100,7 @@ class Attention(nn.Module):
 
         if not test:
 
-            targets = torch.zeros(nB, num_steps+1).long()
+            targets = torch.zeros(nB, num_steps+1).long() #起点target均为0,初始Cur_embeddings， char_embeddings.index_select(0,targets[i])
             if self.cuda:
                 targets = targets.cuda()
             start_id = 0
@@ -110,30 +110,32 @@ class Attention(nn.Module):
                 start_id = start_id+text_length.data[i]
             targets = Variable(targets.transpose(0,1).contiguous())
 
-            output_hiddens = Variable(torch.zeros(num_steps, nB, hidden_size).type_as(feats.data))
+            output_hiddens = Variable(torch.zeros(num_steps, nB, hidden_size).type_as(feats.data)) #num_steps, nB, hidden_size
             hidden = Variable(torch.zeros(nB,hidden_size).type_as(feats.data))
 
             for i in range(num_steps):
                 
-                cur_embeddings = self.char_embeddings.index_select(0, targets[i]) 
+                cur_embeddings = self.char_embeddings.index_select(0, targets[i]) #根据位置embeddings
                 hidden, alpha = self.attention_cell(hidden, feats, cur_embeddings, test) 
                 output_hiddens[i] = hidden
 
             new_hiddens = Variable(torch.zeros(num_labels, hidden_size).type_as(feats.data))
             b = 0
             start = 0
-
+            # output_hiddens: num_steps*num_batch*num_hiddens
+            # new_hiddens: num_labels*num_hiddens
+            
             for length in text_length.data:
-                new_hiddens[start:start+length] = output_hiddens[0:length,b,:]
+                new_hiddens[start:start+length] = output_hiddens[0:length,b,:] #根据label的长度得到输出
                 start = start + length
                 b = b + 1
 
-            probs = self.generator(new_hiddens)
+            probs = self.generator(new_hiddens) #fc层，得到最终分类值(未激活softmax), num_labels* num_classes
             return probs
 
         else:
             hidden = Variable(torch.zeros(nB,hidden_size).type_as(feats.data))
-            targets_temp = Variable(torch.zeros(nB).long().contiguous())
+            targets_temp = Variable(torch.zeros(nB).long().contiguous()) #一直为0
             probs = Variable(torch.zeros(nB*num_steps, self.num_classes))
             if self.cuda:
                 targets_temp = targets_temp.cuda()
@@ -143,10 +145,10 @@ class Attention(nn.Module):
                 # char_embeddings是可学习参数， 38*256， num_classes* num_embeddings
                 cur_embeddings = self.char_embeddings.index_select(0, targets_temp)#64*256
                 hidden, alpha = self.attention_cell(hidden, feats, cur_embeddings, test)#hidden 64*256,  alpha 25* 64
-                hidden2class = self.generator(hidden) # 64 * 37
+                hidden2class = self.generator(hidden) # 64 * 37, 按每个位置fc一下
                 probs[i*nB:(i+1)*nB] = hidden2class
-                _, targets_temp = hidden2class.max(1)
-                targets_temp += 1
+                _, targets_temp = hidden2class.max(1) #得到当前位置的预测类别
+                targets_temp += 1 #根据当前位置推测下一个位置的cur_embeddings的index, +1 是因为前面设置初始cur_embeddings时都预设了0
 
             probs = probs.view(num_steps, nB, self.num_classes).permute(1, 0, 2).contiguous() # num_steps*nB*num_classes=>nB*num_steps*num_classes
             probs = probs.view(-1, self.num_classes).contiguous()
