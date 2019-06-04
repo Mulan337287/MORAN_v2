@@ -11,6 +11,7 @@ class fracPickup(nn.Module):
         self.cuda = CUDA
 
     def forward(self, x):
+        # x: nT*1*1*nB
         x_shape = x.size()
         assert len(x_shape) == 4
         assert x_shape[2] == 1
@@ -29,7 +30,7 @@ class fracPickup(nn.Module):
             w_list[idx-1] = value0
             w_list[idx] = value1
 
-        grid = np.meshgrid(
+        grid = np.meshgrid( #nT*1*2
                 w_list, 
                 h_list, 
                 indexing='ij'
@@ -38,11 +39,11 @@ class fracPickup(nn.Module):
         grid = np.transpose(grid, (1, 0, 2))
         grid = np.expand_dims(grid, 0)
         grid = np.tile(grid, [x_shape[0], 1, 1, 1])
-        grid = torch.from_numpy(grid).type(x.data.type())
+        grid = torch.from_numpy(grid).type(x.data.type()) # nB*1*nT*2
         if self.cuda:
             grid = grid.cuda()
         self.grid = Variable(grid, requires_grad=False)
 
-        x_offset = nn.functional.grid_sample(x, self.grid)
+        x_offset = nn.functional.grid_sample(x, self.grid) #nB*1*1*nT
 
         return x_offset
